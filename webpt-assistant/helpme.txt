@@ -1,0 +1,21 @@
+Web Pen Testing Assistant Guide
+
+What does it do:
+* Runs nmap TCP port scan and services
+* Uses ZAP Spider to discover endpoints
+* Normalises and presents results using AI
+* Encriches finidngs using ExploitDB with Misp optional
+* Scans typically take 5-25 minutes, if longer then assume an error has occured.
+
+How to Run:
+PYTHONPATH=. python -m webpt_assistant.cli scan --target http://<target IP>/
+
+How to Run with MISP:
+PYTHONPATH=. python -m webpt_assistant.cli scan \
+  --target http://<target IP> \
+  --misp-url https://misppriv.circl.lu \
+  --misp-key ""
+  
+Raw Findings:
+output/report.md
+
