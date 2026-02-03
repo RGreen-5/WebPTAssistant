@@ -52,11 +52,15 @@ def main():
     meta = {"run_id": run_id, "target": args.target, "host": host}
 
     # 1) Nmap
+    print("[1/4] Nmap scan starting...")
     nmap_raw = run_nmap_all_ports(host, timeout_s=args.nmap_timeout)
     with open(os.path.join(args.outdir, "nmap_raw.json"), "w", encoding="utf-8") as f:
         json.dump({**meta, **nmap_raw}, f, indent=2)
+    print("[1/4] Nmap scan completed.")
+
 
     # 2) ZAP fast scan
+    print("[2/4] ZAP fast scan starting...")
     zap_raw = zap_fast_scan(
         target=args.target,
         zap_proxy=args.zap_proxy,
@@ -66,11 +70,14 @@ def main():
     )
     with open(os.path.join(args.outdir, "zap_raw.json"), "w", encoding="utf-8") as f:
         json.dump({**meta, **zap_raw}, f, indent=2)
+    print("[2/4] ZAP fast scan completed.")
 
     # 3) Normalize
+    print("[3/4] Normalising + enrichment starting...")
     groups, summary = normalize_zap_alerts(zap_raw["alerts"], baseurl=args.target)
     with open(os.path.join(args.outdir, "zap_groups.json"), "w", encoding="utf-8") as f:
         json.dump({**meta, "summary": summary, "groups": groups}, f, indent=2)
+    print("[3/4] Normalising + enrichment completed.")
 
     # 4) Threat intel: ExploitDB (local searchsploit)
     groups = enrich_with_searchsploit(groups, nmap_stdout=nmap_raw.get("stdout", ""))
@@ -81,14 +88,16 @@ def main():
         	groups,
         	misp_url=args.misp_url,
         	misp_key=args.misp_key,
-        	verify_tls=args.misp_verify_tls
-    	)
+         	verify_tls=args.misp_verify_tls
+   	)
 
     # 6) AI summary (local baseline)
+    print("[4/4] AI summary + report generation starting...")
     if args.ai_mode != "off":
         groups, exec_summary = ai_summarize_groups(groups)
     else:
         exec_summary = "AI summarisation disabled."
+    print("[4/4] Report completed.")
 
     # 7) Report
     render_console_summary(summary, groups, exec_summary)

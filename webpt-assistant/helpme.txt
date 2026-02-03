@@ -7,15 +7,52 @@ What does it do:
 * Encriches finidngs using ExploitDB with Misp optional
 * Scans typically take 5-25 minutes, if longer then assume an error has occured.
 
-How to Run:
-PYTHONPATH=. python -m webpt_assistant.cli scan --target http://<target IP>/
+How to setup enviroment:
 
-How to Run with MISP:
-PYTHONPATH=. python -m webpt_assistant.cli scan \
-  --target http://<target IP> \
-  --misp-url https://misppriv.circl.lu \
-  --misp-key ""
-  
+"sudo apt update
+sudo apt full-upgrade -y
+sudo reboot"
+
+(After reboot)
+ 
+ Installing Dependencies:
+
+"sudo apt install -y \
+git \
+nmap \
+curl \
+wget \
+whois \
+bind9-dnsutils \
+netcat-openbsd \
+jq \
+unzip \
+chromium \
+chromium-driver \
+python3-venv \
+zaproxy
+docker.io"
+
+"source venv/bin/activate
+pip install requests
+pip install python-owasp-zap-v2.4
+pip install rich
+"
+
+Start Zap:
+
+"docker rm -f zap 2>/dev/null || true"
+
+"docker run -d --name zap -p 8080:8080 \
+zaproxy/zap-weekly \
+zap.sh -daemon -host 0.0.0.0 -port 8080 \
+-config api.disablekey=true \
+-config api.addrs.addr.name=.* \
+-config api.addrs.addr.regex=true"
+
+How to Run:
+PYTHONPATH=. python -m webpt_assistant.cli scan --target http://<target IP>
+
 Raw Findings:
 output/report.md
 
