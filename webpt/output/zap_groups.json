@@ -1,0 +1,746 @@
+{
+  "run_id": "20260225T122001Z",
+  "target": "http://10.0.3.15:8081/",
+  "host": "10.0.3.15",
+  "summary": {
+    "baseurl": "http://10.0.3.15:8081/",
+    "raw_instances": 209,
+    "unique_groups": 21,
+    "zap_risk_instance_counts": {
+      "Informational": 168,
+      "Low": 33,
+      "Medium": 8
+    },
+    "exploitability_instance_counts": {
+      "Informational": 168,
+      "Potentially Exploitable": 41
+    },
+    "top_groups": [
+      {
+        "alert": "User Agent Fuzzer",
+        "risk": "Informational",
+        "instances": 132
+      },
+      {
+        "alert": "Cookie Slack Detector",
+        "risk": "Informational",
+        "instances": 21
+      },
+      {
+        "alert": "Server Leaks Version Information via \"Server\" HTTP Response Header Field",
+        "risk": "Low",
+        "instances": 10
+      },
+      {
+        "alert": "X-Content-Type-Options Header Missing",
+        "risk": "Low",
+        "instances": 5
+      },
+      {
+        "alert": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+        "risk": "Low",
+        "instances": 5
+      },
+      {
+        "alert": "Storable and Cacheable Content",
+        "risk": "Informational",
+        "instances": 5
+      },
+      {
+        "alert": "Cookie No HttpOnly Flag",
+        "risk": "Low",
+        "instances": 4
+      },
+      {
+        "alert": "Cookie without SameSite Attribute",
+        "risk": "Low",
+        "instances": 4
+      },
+      {
+        "alert": "Non-Storable Content",
+        "risk": "Informational",
+        "instances": 4
+      },
+      {
+        "alert": "Directory Browsing",
+        "risk": "Medium",
+        "instances": 4
+      },
+      {
+        "alert": "Session Management Response Identified",
+        "risk": "Informational",
+        "instances": 2
+      },
+      {
+        "alert": "Content Security Policy (CSP) Header Not Set",
+        "risk": "Medium",
+        "instances": 2
+      },
+      {
+        "alert": "Permissions Policy Header Not Set",
+        "risk": "Low",
+        "instances": 2
+      },
+      {
+        "alert": "Authentication Request Identified",
+        "risk": "Informational",
+        "instances": 2
+      },
+      {
+        "alert": "Missing Anti-clickjacking Header",
+        "risk": "Medium",
+        "instances": 1
+      }
+    ]
+  },
+  "groups": [
+    {
+      "alert": "User Agent Fuzzer",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "Medium",
+      "instances": 132,
+      "cweid": "0",
+      "wascid": "0",
+      "description": "Check for differences in response based on fuzzed User Agent (eg. mobile sites, access as a Search Engine Crawler). Compares the response statuscode and the hashcode of the response body with the original response.",
+      "solution": "",
+      "reference": "https://owasp.org/wstg",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css",
+          "url_key": "http://10.0.3.15:8081/dvwa/css",
+          "method": "GET",
+          "param": "Header User-Agent"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa",
+          "url_key": "http://10.0.3.15:8081/dvwa",
+          "method": "GET",
+          "param": "Header User-Agent"
+        },
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": "Header User-Agent"
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "POST",
+          "param": "Header User-Agent"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images",
+          "url_key": "http://10.0.3.15:8081/dvwa/images",
+          "method": "GET",
+          "param": "Header User-Agent"
+        }
+      ]
+    },
+    {
+      "alert": "Cookie Slack Detector",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "Low",
+      "instances": 21,
+      "cweid": "205",
+      "wascid": "45",
+      "description": "Repeated GET requests: drop a different cookie each time, followed by normal request with all cookies to stabilize session, compare responses against original baseline GET. This can reveal areas where cookie based authentication/attributes are not actually enforced.",
+      "solution": "",
+      "reference": "https://cwe.mitre.org/data/definitions/205.html",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa",
+          "url_key": "http://10.0.3.15:8081/dvwa",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css",
+          "url_key": "http://10.0.3.15:8081/dvwa/css",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images",
+          "url_key": "http://10.0.3.15:8081/dvwa/images",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "url_key": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Server Leaks Version Information via \"Server\" HTTP Response Header Field",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "High",
+      "instances": 10,
+      "cweid": "497",
+      "wascid": "13",
+      "description": "The web/application server is leaking version information via the \"Server\" HTTP response header. Access to such information may facilitate attackers identifying other vulnerabilities your web/application server is subject to.",
+      "solution": "Ensure that your web server, application server, load balancer, etc. is configured to suppress the \"Server\" header or provide generic details.",
+      "reference": "https://httpd.apache.org/docs/current/mod/core.html#servertokens\nhttps://learn.microsoft.com/en-us/previous-versions/msp-n-p/ff648552(v=pandp.10)\nhttps://www.troyhunt.com/shhh-dont-let-your-response-headers/",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/robots.txt",
+          "url_key": "http://10.0.3.15:8081/robots.txt",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/sitemap.xml",
+          "url_key": "http://10.0.3.15:8081/sitemap.xml",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "url_key": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "X-Content-Type-Options Header Missing",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 5,
+      "cweid": "693",
+      "wascid": "15",
+      "description": "The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing.",
+      "solution": "Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.\nIf possible, ensure that the end user uses a standards-compliant and modern web browser that does not perform MIME-sniffing at all, or that can be directed by the web application/web server to not perform MIME-sniffing.",
+      "reference": "https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/compatibility/gg622941(v=vs.85)\nhttps://owasp.org/www-community/Security_Headers",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "x-content-type-options"
+        },
+        {
+          "url": "http://10.0.3.15:8081/robots.txt",
+          "url_key": "http://10.0.3.15:8081/robots.txt",
+          "method": "GET",
+          "param": "x-content-type-options"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "url_key": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "method": "GET",
+          "param": "x-content-type-options"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images/login_logo.png",
+          "url_key": "http://10.0.3.15:8081/dvwa/images/login_logo.png",
+          "method": "GET",
+          "param": "x-content-type-options"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images/RandomStorm.png",
+          "url_key": "http://10.0.3.15:8081/dvwa/images/RandomStorm.png",
+          "method": "GET",
+          "param": "x-content-type-options"
+        }
+      ]
+    },
+    {
+      "alert": "Cross-Origin-Resource-Policy Header Missing or Invalid",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 5,
+      "cweid": "693",
+      "wascid": "14",
+      "description": "Cross-Origin-Resource-Policy header is an opt-in header designed to counter side-channels attacks like Spectre. Resource should be specifically set as shareable amongst different origins.",
+      "solution": "Ensure that the application/web server sets the Cross-Origin-Resource-Policy header appropriately, and that it sets the Cross-Origin-Resource-Policy header to 'same-origin' for all web pages.\n'same-site' is considered as less secured and should be avoided.\nIf resources must be shared, set the header to 'cross-origin'.\nIf possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Resource-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-resource-policy).",
+      "reference": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "Cross-Origin-Resource-Policy"
+        },
+        {
+          "url": "http://10.0.3.15:8081/robots.txt",
+          "url_key": "http://10.0.3.15:8081/robots.txt",
+          "method": "GET",
+          "param": "Cross-Origin-Resource-Policy"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "url_key": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "method": "GET",
+          "param": "Cross-Origin-Resource-Policy"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images/login_logo.png",
+          "url_key": "http://10.0.3.15:8081/dvwa/images/login_logo.png",
+          "method": "GET",
+          "param": "Cross-Origin-Resource-Policy"
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images/RandomStorm.png",
+          "url_key": "http://10.0.3.15:8081/dvwa/images/RandomStorm.png",
+          "method": "GET",
+          "param": "Cross-Origin-Resource-Policy"
+        }
+      ]
+    },
+    {
+      "alert": "Storable and Cacheable Content",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "Medium",
+      "instances": 5,
+      "cweid": "524",
+      "wascid": "13",
+      "description": "The response contents are storable by caching components such as proxy servers, and may be retrieved directly from the cache, rather than from the origin server by the caching servers, in response to similar requests from other users. If the response data is sensitive, personal or user-specific, this may result in sensitive information being leaked. In some cases, this may even result in a user gaining complete control of the session of another user, depending on the configuration of the caching components in use in their environment. This is primarily an issue where \"shared\" caching servers such as \"proxy\" caches are configured on the local network. This configuration is typically found in corporate or educational environments, for instance.",
+      "solution": "Validate that the response does not contain sensitive, personal or user-specific information. If it does, consider the use of the following HTTP response headers, to limit, or prevent the content being stored and retrieved from the cache by another user:\nCache-Control: no-cache, no-store, must-revalidate, private\nPragma: no-cache\nExpires: 0\nThis configuration directs both HTTP 1.0 and HTTP 1.1 compliant caching servers to not store the response, and to not retrieve the response (without validation) from the cache, in response to a similar request.",
+      "reference": "https://datatracker.ietf.org/doc/html/rfc7234\nhttps://datatracker.ietf.org/doc/html/rfc7231\nhttps://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/robots.txt",
+          "url_key": "http://10.0.3.15:8081/robots.txt",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/sitemap.xml",
+          "url_key": "http://10.0.3.15:8081/sitemap.xml",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "url_key": "http://10.0.3.15:8081/dvwa/css/login.css",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images/login_logo.png",
+          "url_key": "http://10.0.3.15:8081/dvwa/images/login_logo.png",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images/RandomStorm.png",
+          "url_key": "http://10.0.3.15:8081/dvwa/images/RandomStorm.png",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Cookie No HttpOnly Flag",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 4,
+      "cweid": "1004",
+      "wascid": "13",
+      "description": "A cookie has been set without the HttpOnly flag, which means that the cookie can be accessed by JavaScript. If a malicious script can be run on this page then the cookie will be accessible and can be transmitted to another site. If this is a session cookie then session hijacking may be possible.",
+      "solution": "Ensure that the HttpOnly flag is set for all cookies.",
+      "reference": "https://owasp.org/www-community/HttpOnly",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": "PHPSESSID"
+        },
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": "security"
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "PHPSESSID"
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "security"
+        }
+      ]
+    },
+    {
+      "alert": "Cookie without SameSite Attribute",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 4,
+      "cweid": "1275",
+      "wascid": "13",
+      "description": "A cookie has been set without the SameSite attribute, which means that the cookie can be sent as a result of a 'cross-site' request. The SameSite attribute is an effective counter measure to cross-site request forgery, cross-site script inclusion, and timing attacks.",
+      "solution": "Ensure that the SameSite attribute is set to either 'lax' or ideally 'strict' for all cookies.",
+      "reference": "https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-cookie-same-site",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": "PHPSESSID"
+        },
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": "security"
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "PHPSESSID"
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "security"
+        }
+      ]
+    },
+    {
+      "alert": "Non-Storable Content",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "Medium",
+      "instances": 4,
+      "cweid": "524",
+      "wascid": "13",
+      "description": "The response contents are not storable by caching components such as proxy servers. If the response does not contain sensitive, personal or user-specific information, it may benefit from being stored and cached, to improve performance.",
+      "solution": "The content may be marked as storable by ensuring that the following conditions are satisfied:\nThe request method must be understood by the cache and defined as being cacheable (\"GET\", \"HEAD\", and \"POST\" are currently defined as cacheable)\nThe response status code must be understood by the cache (one of the 1XX, 2XX, 3XX, 4XX, or 5XX response classes are generally understood)\nThe \"no-store\" cache directive must not appear in the request or response header fields\nFor caching by \"shared\" caches such as \"proxy\" caches, the \"private\" response directive must not appear in the response\nFor caching by \"shared\" caches such as \"proxy\" caches, the \"Authorization\" header field must not appear in the request, unless the response explicitly allows it (using one of the \"must-revalidate\", \"public\", or \"s-maxage\" Cache-Control response directives)\nIn addition to the conditions above, at least one of the following conditions must also be satisfied by the response:\nIt must contain an \"Expires\" header field\nIt must contain a \"max-age\" response directive\nFor \"shared\" caches such as \"proxy\" caches, it must contain a \"s-maxage\" response directive\nIt must contain a \"Cache Control Extension\" that allows it to be cached\nIt must have a status code that is defined as cacheable by default (200, 203, 204, 206, 300, 301, 404, 405, 410, 414, 501).",
+      "reference": "https://datatracker.ietf.org/doc/html/rfc7234\nhttps://datatracker.ietf.org/doc/html/rfc7231\nhttps://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "POST",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/vulnerabilities/sqli/",
+          "url_key": "http://10.0.3.15:8081/vulnerabilities/sqli/",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Directory Browsing",
+      "risk": "Medium",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 4,
+      "cweid": "548",
+      "wascid": "48",
+      "description": "It is possible to view the directory listing. Directory listing may reveal hidden scripts, include files, backup source files, etc. which can be accessed to read sensitive information.",
+      "solution": "Disable directory browsing. If this is required, make sure the listed files does not induce risks.",
+      "reference": "https://httpd.apache.org/docs/current/mod/core.html#options",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/dvwa/css/",
+          "url_key": "http://10.0.3.15:8081/dvwa/css/",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/images/",
+          "url_key": "http://10.0.3.15:8081/dvwa/images/",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/dvwa/",
+          "url_key": "http://10.0.3.15:8081/dvwa/",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/vulnerabilities/",
+          "url_key": "http://10.0.3.15:8081/vulnerabilities/",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Session Management Response Identified",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "Medium",
+      "instances": 2,
+      "cweid": "-1",
+      "wascid": "-1",
+      "description": "The given response has been identified as containing a session management token. The 'Other Info' field contains a set of header tokens that can be used in the Header Based Session Management Method. If the request is in a context which has a Session Management Method set to \"Auto-Detect\" then this rule will change the session management to use the tokens identified.",
+      "solution": "This is an informational alert rather than a vulnerability and so there is nothing to fix.",
+      "reference": "https://www.zaproxy.org/docs/desktop/addons/authentication-helper/session-mgmt-id/",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": "PHPSESSID"
+        },
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "PHPSESSID"
+        }
+      ]
+    },
+    {
+      "alert": "Content Security Policy (CSP) Header Not Set",
+      "risk": "Medium",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "High",
+      "instances": 2,
+      "cweid": "693",
+      "wascid": "15",
+      "description": "Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks, including Cross Site Scripting (XSS) and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.",
+      "solution": "Ensure that your web server, application server, load balancer, etc. is configured to set the Content-Security-Policy header.",
+      "reference": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP\nhttps://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html\nhttps://www.w3.org/TR/CSP/\nhttps://w3c.github.io/webappsec-csp/\nhttps://web.dev/articles/csp\nhttps://caniuse.com/#feat=contentsecuritypolicy\nhttps://content-security-policy.com/",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/sitemap.xml",
+          "url_key": "http://10.0.3.15:8081/sitemap.xml",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Permissions Policy Header Not Set",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 2,
+      "cweid": "693",
+      "wascid": "15",
+      "description": "Permissions Policy Header is an added layer of security that helps to restrict from unauthorized access or usage of browser/client features by web resources. This policy ensures the user privacy by limiting or specifying the features of the browsers can be used by the web resources. Permissions Policy provides a set of standard HTTP headers that allow website owners to limit which features of browsers can be used by the page such as camera, microphone, location, full screen etc.",
+      "solution": "Ensure that your web server, application server, load balancer, etc. is configured to set the Permissions-Policy header.",
+      "reference": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Permissions-Policy\nhttps://developer.chrome.com/blog/feature-policy/\nhttps://scotthelme.co.uk/a-new-security-header-feature-policy/\nhttps://w3c.github.io/webappsec-feature-policy/\nhttps://www.smashingmagazine.com/2018/12/feature-policy/",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": ""
+        },
+        {
+          "url": "http://10.0.3.15:8081/sitemap.xml",
+          "url_key": "http://10.0.3.15:8081/sitemap.xml",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Authentication Request Identified",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "High",
+      "instances": 2,
+      "cweid": "-1",
+      "wascid": "-1",
+      "description": "The given request has been identified as an authentication request. The 'Other Info' field contains a set of key=value lines which identify any relevant fields. If the request is in a context which has an Authentication Method set to \"Auto-Detect\" then this rule will change the authentication to match the request identified.",
+      "solution": "This is an informational alert rather than a vulnerability and so there is nothing to fix.",
+      "reference": "https://www.zaproxy.org/docs/desktop/addons/authentication-helper/auth-req-id/",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "POST",
+          "param": "Login"
+        }
+      ]
+    },
+    {
+      "alert": "Missing Anti-clickjacking Header",
+      "risk": "Medium",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 1,
+      "cweid": "1021",
+      "wascid": "15",
+      "description": "The response does not protect against 'ClickJacking' attacks. It should include either Content-Security-Policy with 'frame-ancestors' directive or X-Frame-Options.",
+      "solution": "Modern Web browsers support the Content-Security-Policy and X-Frame-Options HTTP headers. Ensure one of them is set on all web pages returned by your site/app.\nIf you expect the page to be framed only by pages on your server (e.g. it's part of a FRAMESET) then you'll want to use SAMEORIGIN, otherwise if you never expect the page to be framed, you should use DENY. Alternatively consider implementing Content Security Policy's \"frame-ancestors\" directive.",
+      "reference": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Frame-Options",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "x-frame-options"
+        }
+      ]
+    },
+    {
+      "alert": "Storable but Non-Cacheable Content",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "Medium",
+      "instances": 1,
+      "cweid": "524",
+      "wascid": "13",
+      "description": "The response contents are storable by caching components such as proxy servers, but will not be retrieved directly from the cache, without validating the request upstream, in response to similar requests from other users.",
+      "solution": "",
+      "reference": "https://datatracker.ietf.org/doc/html/rfc7234\nhttps://datatracker.ietf.org/doc/html/rfc7231\nhttps://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Cross-Origin-Embedder-Policy Header Missing or Invalid",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 1,
+      "cweid": "693",
+      "wascid": "14",
+      "description": "Cross-Origin-Embedder-Policy header is a response header that prevents a document from loading any cross-origin resources that don't explicitly grant the document permission (using CORP or CORS).",
+      "solution": "Ensure that the application/web server sets the Cross-Origin-Embedder-Policy header appropriately, and that it sets the Cross-Origin-Embedder-Policy header to 'require-corp' for documents.\nIf possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Embedder-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-embedder-policy).",
+      "reference": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "Cross-Origin-Embedder-Policy"
+        }
+      ]
+    },
+    {
+      "alert": "Cross-Origin-Opener-Policy Header Missing or Invalid",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 1,
+      "cweid": "693",
+      "wascid": "14",
+      "description": "Cross-Origin-Opener-Policy header is a response header that allows a site to control if others included documents share the same browsing context. Sharing the same browsing context with untrusted documents might lead to data leak.",
+      "solution": "Ensure that the application/web server sets the Cross-Origin-Opener-Policy header appropriately, and that it sets the Cross-Origin-Opener-Policy header to 'same-origin' for documents.\n'same-origin-allow-popups' is considered as less secured and should be avoided.\nIf possible, ensure that the end user uses a standards-compliant and modern web browser that supports the Cross-Origin-Opener-Policy header (https://caniuse.com/mdn-http_headers_cross-origin-opener-policy).",
+      "reference": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": "Cross-Origin-Opener-Policy"
+        }
+      ]
+    },
+    {
+      "alert": "In Page Banner Information Leak",
+      "risk": "Low",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "High",
+      "instances": 1,
+      "cweid": "497",
+      "wascid": "13",
+      "description": "The server returned a version banner string in the response content. Such information leaks may allow attackers to further target specific issues impacting the product and version in use.",
+      "solution": "Configure the server to prevent such information leaks. For example:\nUnder Tomcat this is done via the \"server\" directive and implementation of custom error pages.\nUnder Apache this is done via the \"ServerSignature\" and \"ServerTokens\" directives.",
+      "reference": "https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/sitemap.xml",
+          "url_key": "http://10.0.3.15:8081/sitemap.xml",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    },
+    {
+      "alert": "Session Management Response Identified",
+      "risk": "Informational",
+      "exploitability": "Informational",
+      "confidence": "High",
+      "instances": 1,
+      "cweid": "-1",
+      "wascid": "-1",
+      "description": "The given response has been identified as containing a session management token. The 'Other Info' field contains a set of header tokens that can be used in the Header Based Session Management Method. If the request is in a context which has a Session Management Method set to \"Auto-Detect\" then this rule will change the session management to use the tokens identified.",
+      "solution": "This is an informational alert rather than a vulnerability and so there is nothing to fix.",
+      "reference": "https://www.zaproxy.org/docs/desktop/addons/authentication-helper/session-mgmt-id/",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/",
+          "url_key": "http://10.0.3.15:8081/",
+          "method": "GET",
+          "param": "PHPSESSID"
+        }
+      ]
+    },
+    {
+      "alert": "Relative Path Confusion",
+      "risk": "Medium",
+      "exploitability": "Potentially Exploitable",
+      "confidence": "Medium",
+      "instances": 1,
+      "cweid": "20",
+      "wascid": "20",
+      "description": "The web server is configured to serve responses to ambiguous URLs in a manner that is likely to lead to confusion about the correct \"relative path\" for the URL. Resources (CSS, images, etc.) are also specified in the page response using relative, rather than absolute URLs. In an attack, if the web browser parses the \"cross-content\" response in a permissive manner, or can be tricked into permissively parsing the \"cross-content\" response, using techniques such as framing, then the web browser may be fooled into interpreting HTML as CSS (or other content types), leading to an XSS vulnerability.",
+      "solution": "Web servers and frameworks should be updated to be configured to not serve responses to ambiguous URLs in such a way that the relative path of such URLs could be mis-interpreted by components on either the client side, or server side.\nWithin the application, the correct use of the \"<base>\" HTML tag in the HTTP response will unambiguously specify the base URL for all relative URLs in the document.\nUse the \"Content-Type\" HTTP response header to make it harder for the attacker to force the web browser to mis-interpret the content type of the response.\nUse the \"X-Content-Type-Options: nosniff\" HTTP response header to prevent the web browser from \"sniffing\" the content type of the response.\nUse a modern DOCTYPE such as \"<!doctype html>\" to prevent the page from being rendered in the web browser using \"Quirks Mode\", since this results in the content type being ignored by the web browser.\nSpecify the \"X-Frame-Options\" HTTP response header to prevent Quirks Mode from being enabled in the web browser using framing attacks.",
+      "reference": "https://arxiv.org/abs/1811.00917\nhttps://hsivonen.fi/doctype/\nhttps://www.w3schools.com/tags/tag_base.asp",
+      "examples": [
+        {
+          "url": "http://10.0.3.15:8081/login.php",
+          "url_key": "http://10.0.3.15:8081/login.php",
+          "method": "GET",
+          "param": ""
+        }
+      ]
+    }
+  ]
+}

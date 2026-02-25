@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+read -rp "Target: " TARGET
+PYTHONPATH=. python -m scripts.cli scan --target "$TARGET"

@@ -1,0 +1,137 @@
+{
+  "target": "http://192.168.56.102/",
+  "raw_alert_instances": 17503,
+  "unique_alert_groups": 32,
+  "risk_instance_counts": {
+    "Medium": 3471,
+    "Low": 9972,
+    "Informational": 4044,
+    "High": 16
+  },
+  "top_groups_by_instances": [
+    {
+      "alert": "Insufficient Site Isolation Against Spectre Vulnerability",
+      "risk": "Low",
+      "confidence": "Medium",
+      "instances": 3994
+    },
+    {
+      "alert": "Server Leaks Version Information via \"Server\" HTTP Response Header Field",
+      "risk": "Low",
+      "confidence": "High",
+      "instances": 1925
+    },
+    {
+      "alert": "Storable and Cacheable Content",
+      "risk": "Informational",
+      "confidence": "Medium",
+      "instances": 1692
+    },
+    {
+      "alert": "Permissions Policy Header Not Set",
+      "risk": "Low",
+      "confidence": "Medium",
+      "instances": 1655
+    },
+    {
+      "alert": "Content Security Policy (CSP) Header Not Set",
+      "risk": "Medium",
+      "confidence": "High",
+      "instances": 1650
+    },
+    {
+      "alert": "X-Content-Type-Options Header Missing",
+      "risk": "Low",
+      "confidence": "Medium",
+      "instances": 1370
+    },
+    {
+      "alert": "Missing Anti-clickjacking Header",
+      "risk": "Medium",
+      "confidence": "Medium",
+      "instances": 1310
+    },
+    {
+      "alert": "Modern Web Application",
+      "risk": "Informational",
+      "confidence": "Medium",
+      "instances": 1284
+    },
+    {
+      "alert": "User Controllable HTML Element Attribute (Potential XSS)",
+      "risk": "Informational",
+      "confidence": "Low",
+      "instances": 792
+    },
+    {
+      "alert": "Timestamp Disclosure - Unix",
+      "risk": "Low",
+      "confidence": "Low",
+      "instances": 490
+    },
+    {
+      "alert": "Absence of Anti-CSRF Tokens",
+      "risk": "Medium",
+      "confidence": "Low",
+      "instances": 376
+    },
+    {
+      "alert": "In Page Banner Information Leak",
+      "risk": "Low",
+      "confidence": "High",
+      "instances": 338
+    },
+    {
+      "alert": "Non-Storable Content",
+      "risk": "Informational",
+      "confidence": "Medium",
+      "instances": 233
+    },
+    {
+      "alert": "Information Disclosure - Debug Error Messages",
+      "risk": "Low",
+      "confidence": "Medium",
+      "instances": 122
+    },
+    {
+      "alert": "Application Error Disclosure",
+      "risk": "Medium",
+      "confidence": "Medium",
+      "instances": 104
+    },
+    {
+      "alert": "Server Leaks Information via \"X-Powered-By\" HTTP Response Header Field(s)",
+      "risk": "Low",
+      "confidence": "Medium",
+      "instances": 41
+    },
+    {
+      "alert": "Source Code Disclosure - SQL",
+      "risk": "Medium",
+      "confidence": "Medium",
+      "instances": 27
+    },
+    {
+      "alert": "Information Disclosure - Suspicious Comments",
+      "risk": "Informational",
+      "confidence": "Medium",
+      "instances": 19
+    },
+    {
+      "alert": "Cookie without SameSite Attribute",
+      "risk": "Low",
+      "confidence": "Medium",
+      "instances": 18
+    },
+    {
+      "alert": "Path Traversal",
+      "risk": "High",
+      "confidence": "Medium",
+      "instances": 16
+    }
+  ],
+  "notes": [
+    "ZAP produces repeated alert instances per URL/parameter; grouped output is what you present.",
+    "Counts are instances, not unique vulnerabilities. Use groups for reporting."
+  ]
+}
