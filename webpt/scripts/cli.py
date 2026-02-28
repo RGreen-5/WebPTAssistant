@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime, UTC
 from urllib.parse import urlparse
+from zapv2 import ZAPv2
 
 from scripts.core.nmap_runner import run_nmap_all_ports
 from scripts.core.zap_runner import zap_fast_scan
@@ -11,7 +12,7 @@ from scripts.connectors.exploitdb import enrich_with_searchsploit
 from scripts.connectors.misp import misp_enrich_groups
 from scripts.ai.summarize import ai_summarize_groups
 from scripts.reporting.render import render_console_summary, write_markdown_report
-
+from scripts.core.sqlmap_runner import run_sqlmap_quick, sqlmap_findings_to_alerts
 
 def parse_args():
     p = argparse.ArgumentParser(prog="webpt-assistant")
@@ -58,8 +59,10 @@ def main():
         json.dump({**meta, **nmap_raw}, f, indent=2)
     print("[1/4] Nmap scan completed.")
 
-    # 2) ZAP fast scan
-    print("[2/4] ZAP fast scan starting...")
+    # 2) ZAP fast scan + SQLMap verification
+    print("[2/4] ZAP & SQLMap scan starting, this may take a while...")
+
+    # ZAP SCAN
     zap_raw = zap_fast_scan(
         target=target,
         zap_proxy=args.zap_proxy,
@@ -67,9 +70,76 @@ def main():
         spider_budget_s=args.spider_seconds,
         ascan_budget_s=args.ascan_seconds,
     )
+
+    # Save ZAP raw immediately
     with open(os.path.join(args.outdir, "zap_raw.json"), "w", encoding="utf-8") as f:
         json.dump({**meta, **zap_raw}, f, indent=2)
-    print("[2/4] ZAP fast scan completed.")
+
+    # SQLMAP TARGET PREPARATION
+    parsed = urlparse(target)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+
+    zap = ZAPv2(apikey="", proxies={"http": args.zap_proxy, "https": args.zap_proxy})
+
+    try:
+        discovered = zap.core.urls(base)
+    except Exception:
+        discovered = []
+
+    param_urls = [u for u in discovered if "?" in (u or "")]
+    param_urls = param_urls[:5]  # keep quick
+
+    # Extract session cookie from ZAP history
+    cookie = None
+    try:
+        msgs = zap.core.messages(baseurl=base)
+        for m in msgs:
+            rh = m.get("requestHeader", "")
+            for line in rh.splitlines():
+                if line.lower().startswith("cookie:"):
+                    cookie = line.split(":", 1)[1].strip()
+                    break
+            if cookie:
+                break
+    except Exception:
+        pass
+
+    # SQLMAP RUNS (SEPARATE)
+    sqlmap_runs = []
+    sqlmap_alerts = []
+
+    def _safe_slug(u: str) -> str:
+        import re
+        return re.sub(r"[^a-zA-Z0-9]+", "_", u)[:80] or "target"
+
+    for u in (param_urls if param_urls else [target]):
+        per_url_outdir = os.path.join(args.outdir, "sqlmap", _safe_slug(u))
+
+        sqlmap_res = run_sqlmap_quick(
+            target_url=u,
+            output_dir=per_url_outdir,
+            max_runtime_s=900,
+            crawl=0,
+            forms=False,
+            cookie=cookie,
+        )
+
+        sqlmap_runs.append(sqlmap_res)
+        sqlmap_alerts.extend(sqlmap_findings_to_alerts(sqlmap_res))
+
+        # Stop early if SQLi confirmed
+        if sqlmap_res.get("finding_count", 0) > 0:
+            break
+
+        # Save SQLMap raw results
+        with open(os.path.join(args.outdir, "sqlmap_raw.json"), "w", encoding="utf-8") as f:
+            json.dump(sqlmap_runs, f, indent=2)
+
+        # Save SQLMap converted alerts separately
+        with open(os.path.join(args.outdir, "sqlmap_alerts.json"), "w", encoding="utf-8") as f:
+            json.dump(sqlmap_alerts, f, indent=2)
+
+        print("[2/4] ZAP and SQLMap scans completed.")
 
     # 3) Normalize
     print("[3/4] Normalising + enrichment starting...")
