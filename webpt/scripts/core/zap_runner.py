@@ -3,6 +3,50 @@ import requests
 from urllib.parse import urlparse
 from zapv2 import ZAPv2
 
+def _fetch_alerts_paged(zap: ZAPv2, base: str, page_size: int = 200, max_total: int = 12000) -> list:
+
+    """
+    Robust alert collection:
+    - small pages to avoid large HTTP responses
+    - retries on broken chunks / transient connection errors
+    - hard cap to prevent huge disk writes
+    Returns partial results if ZAP connection breaks.
+    """
+
+    alerts = []
+    start = 0
+
+    while start < max_total:
+        last_exc = None
+
+        for _ in range(5):
+            try:
+                batch = zap.core.alerts(baseurl=base, start=start, count=page_size)
+                if not batch:
+                    return alerts
+                alerts.extend(batch)
+
+                if len(batch) < page_size:
+                    return alerts
+
+                start += page_size
+                last_exc = None
+                break
+
+            except (
+                requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ReadTimeout,
+            ) as e:
+                last_exc = e
+                time.sleep(1)
+
+        if last_exc is not None:
+            # Return what we have rather than crashing the whole scan
+            return alerts
+
+    return alerts
+
 
 def zap_fast_scan(
     target: str,
@@ -20,24 +64,23 @@ def zap_fast_scan(
     u = urlparse(target)
     base = f"{u.scheme}://{u.netloc}"
 
-    # Exclusions (scope control) - treat entries as path prefixes (your current CLI behavior)
+    # Exclusions (scope control)
     for p in exclude_prefixes:
         zap.core.exclude_from_proxy(f"{base}{p}.*")
 
     def _interesting_param(url: str) -> bool:
         s = (url or "").lower()
-        # Generic “high value” parameter hints (NOT app-specific)
         keys = [
             "pass", "password", "pwd",
             "user", "username", "email",
             "id", "qid", "uid",
             "q", "query", "search",
             "token", "csrf", "auth",
-            "redirect", "return", "next", "url"
+            "redirect", "return", "next", "url",
         ]
         return any(k in s for k in keys)
 
-    # Best-effort spider tuning (options may not exist in some ZAP builds)
+    # Best effort spider tuning
     try:
         zap.spider.set_option_max_duration(spider_budget_s)
     except Exception:
@@ -56,10 +99,9 @@ def zap_fast_scan(
         zap.urlopen(target)
         time.sleep(1)
     except Exception:
-        # If seed fails, still attempt spider (sometimes works anyway)
         pass
 
-    # Spider with wall-clock budget
+    # Spider with wall clock budget
     spider_id = zap.spider.scan(target)
     t0 = time.time()
     while int(zap.spider.status(spider_id)) < 100:
@@ -71,28 +113,25 @@ def zap_fast_scan(
             break
         time.sleep(1)
 
-    # Increase scan aggressiveness for SQLi detection
+    # Increase scan aggressiveness
     try:
         zap.ascan.set_option_attack_strength("HIGH")
         zap.ascan.set_option_alert_threshold("LOW")
     except Exception:
         pass
 
-    # Generic parameterised URL boost: actively scan parameterised endpoints ZAP discovered
+    # Parameterised URL boost
     try:
         discovered = zap.core.urls(base)
     except Exception:
         discovered = []
 
     param_urls = [x for x in discovered if "?" in (x or "")]
-    # Prioritise URLs with “interesting” parameter names, then shorter URLs first
     param_urls.sort(key=lambda x: (not _interesting_param(x), len(x)))
 
-    # Limit to keep runtime sane
     MAX_PARAM_URLS = 30
     param_urls = param_urls[:MAX_PARAM_URLS]
 
-    # Seed param URLs into history
     for x in param_urls:
         try:
             zap.urlopen(x)
@@ -100,10 +139,10 @@ def zap_fast_scan(
         except Exception:
             pass
 
-    # Start main active scan
+    # Active scan main target
     ascan_id = zap.ascan.scan(target)
 
-    # ALSO actively scan the parameterised URLs explicitly (this is the key improvement)
+    # Actively scan parameterised URLs too
     for x in param_urls:
         try:
             zap.ascan.scan(x)
@@ -111,7 +150,7 @@ def zap_fast_scan(
         except Exception:
             pass
 
-    # Wait for main active scan to complete (budgeted)
+    # Wait for main scan completion (budgeted)
     t1 = time.time()
     while int(zap.ascan.status(ascan_id)) < 100:
         if time.time() - t1 > ascan_budget_s:
@@ -122,18 +161,8 @@ def zap_fast_scan(
             break
         time.sleep(5)
 
-    # Pull alerts for the whole site (base), not only the specific target URL
-    alerts = []
-    start = 0
-    page_size = 500  # tune: 200–1000; smaller = safer
-    while True:
-        batch = zap.core.alerts(baseurl=base, start=start, count=page_size)
-        if not batch:
-            break
-        alerts.extend(batch)
-        if len(batch) < page_size:
-            break
-        start += page_size
+    # Pull alerts robustly (small pages + retries + cap)
+    alerts = _fetch_alerts_paged(zap, base=base, page_size=200, max_total=12000)
 
     return {
         "target": target,
@@ -144,6 +173,7 @@ def zap_fast_scan(
         "spider_budget_s": spider_budget_s,
         "ascan_budget_s": ascan_budget_s,
         "param_urls_considered": len(param_urls),
+        "alerts_truncated": (len(alerts) >= 12000),
         "alerts": alerts,
         "alert_instances": len(alerts),
     }
