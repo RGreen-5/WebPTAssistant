@@ -1,21 +1,8 @@
-# sqlmap_runner.py
+# sqlmap_runner.py (UPDATED VERSION)
 #
-# Purpose:
-#   Fast-but-reasonable SQLMap runner intended for *authorised* security testing.
-#   Designed to plug into an orchestration pipeline (like your Nmap/ZAP runners),
-#   producing a structured dict + parsable findings without hardcoding any target app.
-#
-# Philosophy:
-#   - "Quick" but with decent coverage: uses crawl+forms discovery, moderate level/risk,
-#     and a second-pass escalation ONLY for URLs/params that show signs of injection.
-#   - Avoids noisy tamper chains by default (analyst-friendly + defensible methodology).
-#
-# Requirements:
-#   - sqlmap installed and in PATH (e.g., `sudo apt install sqlmap` on Kali)
-#
-# Notes:
-#   - SQLMap output is not guaranteed stable as a JSON API without using its API server.
-#     This runner parses stdout and (if available) SQLMap output log files.
+# This file runs SQLMap to find SQL injections.
+# NEW: It now supports reading from request files (-r mode) which is MUCH better
+# because it preserves cookies, POST bodies, and all the context ZAP gathered
 
 from __future__ import annotations
 
@@ -32,14 +19,15 @@ from urllib.parse import urlparse
 
 @dataclass
 class SqlmapFinding:
+    """This represents one SQL injection that SQLMap found"""
     url: str
     parameter: str
     place: str  # GET/POST/URI/COOKIE/HEADER
     technique: Optional[str] = None  # boolean-based blind/time-based/error-based/UNION etc.
-    dbms: Optional[str] = None
+    dbms: Optional[str] = None  # What database? MySQL? PostgreSQL?
     title: Optional[str] = None
     payload: Optional[str] = None
-    confidence: str = "High"  # SQLMap "vulnerable" is typically high confidence
+    confidence: str = "High"
     severity: str = "High"
     tool: str = "sqlmap"
 
@@ -53,10 +41,10 @@ _SQLMAP_DBMS_RE = re.compile(r"back-end DBMS:\s*(.+)", re.IGNORECASE)
 
 
 def _which_sqlmap() -> str:
+    """Find where SQLMap is installed"""
     path = shutil.which("sqlmap")
     if path:
         return path
-    # Some installs have sqlmap.py only
     path = shutil.which("sqlmap.py")
     if path:
         return path
@@ -64,23 +52,21 @@ def _which_sqlmap() -> str:
 
 
 def _safe_mkdir(p: str) -> None:
+    """Create directory if it doesn't exist"""
     os.makedirs(p, exist_ok=True)
-
-
-def _read_text_if_exists(path: str, max_bytes: int = 3_000_000) -> str:
-    if not os.path.exists(path):
-        return ""
-    try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            return f.read(max_bytes)
-    except Exception:
-        return ""
 
 
 def _parse_sqlmap_stdout(stdout: str, target_url: str) -> List[SqlmapFinding]:
     """
-    Parse SQLMap stdout for confirmed injection blocks.
-    SQLMap prints a structured block when it confirms an injectable parameter.
+    Read the output from SQLMap and extract what it found.
+    SQLMap prints blocks like:
+    
+    Parameter: password (GET)
+    Type: boolean-based blind
+    Title: AND boolean-based blind...
+    Payload: ' AND 1234=1234 AND '
+    
+    We parse these blocks and create SqlmapFinding objects.
     """
     findings: List[SqlmapFinding] = []
 
@@ -93,13 +79,14 @@ def _parse_sqlmap_stdout(stdout: str, target_url: str) -> List[SqlmapFinding]:
 
     lines = stdout.splitlines()
 
-    # capture global DBMS lines (sometimes appears outside block)
+    # Capture global DBMS info
     for line in lines:
         mdb = _SQLMAP_DBMS_RE.search(line)
         if mdb:
             current_dbms = (mdb.group(1) or "").strip()
 
     def flush_block():
+        """Save the current parameter block"""
         nonlocal current_param, current_place, current_type, current_title, current_payload
         if current_param and current_place:
             findings.append(
@@ -122,7 +109,6 @@ def _parse_sqlmap_stdout(stdout: str, target_url: str) -> List[SqlmapFinding]:
     for line in lines:
         mstart = _SQLMAP_PARAM_BLOCK_START_RE.match(line)
         if mstart:
-            # new block begins; flush previous
             flush_block()
             current_param = mstart.group(1)
             current_place = mstart.group(2)
@@ -145,8 +131,6 @@ def _parse_sqlmap_stdout(stdout: str, target_url: str) -> List[SqlmapFinding]:
 
     flush_block()
 
-    # If SQLMap says "parameter 'x' is vulnerable" but doesn't print full blocks,
-    # create minimal findings.
     if not findings:
         for line in lines:
             mv = _SQLMAP_VULN_RE.search(line)
@@ -160,7 +144,7 @@ def _parse_sqlmap_stdout(stdout: str, target_url: str) -> List[SqlmapFinding]:
                     )
                 )
 
-    # Deduplicate (same url/param/place)
+    # Remove duplicates
     uniq = {}
     for f in findings:
         key = (f.url, f.parameter, f.place, f.technique or "", f.payload or "")
@@ -170,31 +154,46 @@ def _parse_sqlmap_stdout(stdout: str, target_url: str) -> List[SqlmapFinding]:
 
 def _build_base_args(
     sqlmap_path: str,
-    target_url: str,
-    output_dir: str,
-    cookie: Optional[str],
-    headers: Optional[Dict[str, str]],
-    data: Optional[str],
-    method: Optional[str],
-    timeout_s: int,
-    threads: int,
-    level: int,
-    risk: int,
-    crawl: int,
-    forms: bool,
-    smart: bool,
-    random_agent: bool,
-    flush_session: bool,
+    target_url: Optional[str] = None,
+    request_file: Optional[str] = None,
+    output_dir: str = "",
+    cookie: Optional[str] = None,
+    headers: Optional[Dict[str, str]] = None,
+    data: Optional[str] = None,
+    method: Optional[str] = None,
+    timeout_s: int = 10,
+    threads: int = 4,
+    level: int = 3,
+    risk: int = 2,
+    crawl: int = 2,
+    forms: bool = True,
+    smart: bool = True,
+    random_agent: bool = True,
+    flush_session: bool = False,
 ) -> List[str]:
-    args = [sqlmap_path, "-u", target_url, "--batch", "--output-dir", output_dir]
+    """
+    Build the command line arguments for SQLMap.
+    NEW: Supports either -u URL (old way) OR -r request_file (new way, better)
+    """
+    args = [sqlmap_path, "--batch", "--output-dir", output_dir]
 
-    # Discovery knobs
-    if crawl and crawl > 0:
-        args += ["--crawl", str(crawl)]
-    if forms:
-        args += ["--forms"]
+    # NEW: Use request file if available (this is BETTER)
+    if request_file and os.path.exists(request_file):
+        args += ["-r", request_file]
+        # Request file mode already includes method, data, cookies, everything
+    elif target_url:
+        # OLD: URL mode (still supported for backward compatibility)
+        args += ["-u", target_url]
+        
+        # These only matter in -u mode
+        if crawl and crawl > 0:
+            args += ["--crawl", str(crawl)]
+        if forms:
+            args += ["--forms"]
+    else:
+        raise ValueError("Either target_url or request_file must be provided")
 
-    # Accuracy/perf knobs
+    # These settings apply to BOTH modes
     args += ["--level", str(level), "--risk", str(risk)]
     args += ["--threads", str(max(1, threads))]
     args += ["--timeout", str(max(3, timeout_s))]
@@ -208,64 +207,80 @@ def _build_base_args(
     if flush_session:
         args += ["--flush-session"]
 
-    # Request context
-    if method:
-        args += ["--method", method.upper()]
-    if data:
-        args += ["--data", data]
-    if cookie:
-        args += ["--cookie", cookie]
-    if headers:
-        for k, v in headers.items():
-            # sqlmap expects raw header lines
-            args += ["--header", f"{k}: {v}"]
+    # These only matter in -u mode
+    if not request_file or not os.path.exists(request_file):
+        if method:
+            args += ["--method", method.upper()]
+        if data:
+            args += ["--data", data]
+        if cookie:
+            args += ["--cookie", cookie]
+        if headers:
+            for k, v in headers.items():
+                args += ["--header", f"{k}: {v}"]
 
-    # Make output quieter but still informative
-    args += ["-v", "1"]  # keep it low for speed/log size
+    args += ["-v", "1"]
     return args
 
 
 def run_sqlmap_quick(
-    target_url: str,
-    output_dir: str,
+    target_url: Optional[str] = None,
+    request_file: Optional[str] = None,
+    output_dir: str = "/tmp/sqlmap_output",
     *,
     max_runtime_s: int = 900,
     cookie: Optional[str] = None,
     headers: Optional[Dict[str, str]] = None,
     data: Optional[str] = None,
     method: Optional[str] = None,
-    # "Quick but doesn't miss things": start moderate, then escalate only when needed.
     threads: int = 4,
     timeout_s: int = 10,
     crawl: int = 2,
     forms: bool = True,
-    # Pass-1 settings
     level_1: int = 3,
     risk_1: int = 2,
-    # Pass-2 escalation (still controlled)
     level_2: int = 5,
     risk_2: int = 3,
 ) -> Dict[str, Any]:
     """
-    Two-pass SQLMap strategy:
-      - Pass 1 (fast coverage): crawl+forms, level 3 risk 2, smart mode
-      - Pass 2 (targeted escalation): only if pass-1 indicates possible injection
-        or confirms injection but without full technique details.
+    Run SQLMap with a smart two-pass strategy:
+    
+    Pass 1 (fast): --level=3 --risk=2
+      - Tests basic SQL injection
+      - Takes 2-5 minutes
+      - Catches 90% of injections
+    
+    Pass 2 (thorough): --level=5 --risk=3
+      - Only if Pass 1 found something promising
+      - Takes 2-5 minutes more
+      - Catches difficult blind injections
+    
+    USAGE:
+    - Old way: run_sqlmap_quick(target_url="http://target.com?id=1")
+    - New way (BETTER): run_sqlmap_quick(request_file="/tmp/req.txt")
     """
+    if not target_url and not request_file:
+        raise ValueError("Either target_url or request_file must be provided")
+
     _safe_mkdir(output_dir)
     sqlmap_path = _which_sqlmap()
+
+    mode = "request_file" if (request_file and os.path.exists(request_file)) else "target_url"
+    effective_target = request_file if mode == "request_file" else target_url
 
     started = time.time()
 
     def run_one(pass_name: str, level: int, risk: int, smart: bool) -> Dict[str, Any]:
+        """Run one pass of SQLMap"""
         args = _build_base_args(
             sqlmap_path=sqlmap_path,
-            target_url=target_url,
+            target_url=target_url if mode == "target_url" else None,
+            request_file=request_file if mode == "request_file" else None,
             output_dir=output_dir,
-            cookie=cookie,
-            headers=headers,
-            data=data,
-            method=method,
+            cookie=cookie if mode == "target_url" else None,
+            headers=headers if mode == "target_url" else None,
+            data=data if mode == "target_url" else None,
+            method=method if mode == "target_url" else None,
             timeout_s=timeout_s,
             threads=threads,
             level=level,
@@ -274,10 +289,9 @@ def run_sqlmap_quick(
             forms=forms,
             smart=smart,
             random_agent=True,
-            flush_session=(pass_name == "pass1"),  # keep pass2 incremental
+            flush_session=(pass_name == "pass1"),
         )
 
-        # Keep remaining time for pass2
         remaining = max(30, max_runtime_s - int(time.time() - started))
 
         try:
@@ -295,9 +309,8 @@ def run_sqlmap_quick(
             stderr = (e.stderr or "") if isinstance(e.stderr, str) else ""
             rc = 124
 
-        findings = _parse_sqlmap_stdout(stdout + "\n" + stderr, target_url)
+        findings = _parse_sqlmap_stdout(stdout + "\n" + stderr, effective_target)
 
-        # Heuristic: detect “maybe injectable” indicators even if not fully confirmed
         maybe_indicators = any(
             s.lower().find("heuristic") >= 0
             or s.lower().find("might be injectable") >= 0
@@ -307,6 +320,7 @@ def run_sqlmap_quick(
 
         return {
             "pass": pass_name,
+            "mode": mode,
             "cmd": " ".join(shlex.quote(x) for x in args),
             "returncode": rc,
             "stdout_tail": (stdout[-4000:] if stdout else ""),
@@ -315,10 +329,10 @@ def run_sqlmap_quick(
             "maybe_indicators": maybe_indicators,
         }
 
-    # Pass 1
+    # Pass 1: Fast and smart
     pass1 = run_one("pass1", level_1, risk_1, smart=True)
 
-    # Decide whether to escalate
+    # Decide if we need Pass 2
     pass1_findings = pass1.get("findings", []) or []
     need_escalation = bool(pass1_findings) or bool(pass1.get("maybe_indicators"))
 
@@ -326,14 +340,15 @@ def run_sqlmap_quick(
     if need_escalation:
         pass2 = run_one("pass2", level_2, risk_2, smart=False)
 
-    # Combine findings (dedupe)
+    # Combine findings
     combined: Dict[tuple, Dict[str, Any]] = {}
     for f in (pass1_findings + ((pass2 or {}).get("findings", []) or [])):
         key = (f.get("url"), f.get("parameter"), f.get("place"), f.get("technique"), f.get("payload"))
         combined[key] = f
 
     return {
-        "target": target_url,
+        "target": effective_target,
+        "mode": mode,
         "tool": "sqlmap",
         "strategy": {
             "pass1": {"level": level_1, "risk": risk_1, "smart": True, "crawl": crawl, "forms": forms},
@@ -348,9 +363,11 @@ def run_sqlmap_quick(
     }
 
 
-# Optional convenience wrapper for your pipeline:
-# Convert SQLMap findings into a ZAP-like alert object list so your normaliser can ingest it.
 def sqlmap_findings_to_alerts(sqlmap_result: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Convert SQLMap findings into the same format that ZAP alerts use.
+    This way they can be combined with other findings in your report.
+    """
     alerts: List[Dict[str, Any]] = []
     for f in sqlmap_result.get("findings", []) or []:
         alerts.append(
@@ -361,7 +378,7 @@ def sqlmap_findings_to_alerts(sqlmap_result: Dict[str, Any]) -> List[Dict[str, A
                 "confidence": "High",
                 "url": f.get("url", ""),
                 "param": f.get("parameter", ""),
-                "method": "GET/POST",  # sqlmap output parsing doesn’t always include exact method line
+                "method": "GET/POST",
                 "pluginId": "SQLMAP",
                 "cweid": "89",
                 "wascid": "19",

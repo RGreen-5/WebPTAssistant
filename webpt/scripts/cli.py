@@ -1,3 +1,6 @@
+# cli.py - Your main entry point
+# This file runs the whole scan: nmap + zap + sqlmap + report
+
 import argparse
 import json
 import os
@@ -8,6 +11,10 @@ from zapv2 import ZAPv2
 from scripts.core.nmap_runner import run_nmap_all_ports
 from scripts.core.zap_runner import zap_fast_scan
 from scripts.core.normalize import normalize_zap_alerts
+from scripts.core.zap_message_extractor import (
+    analyze_zap_messages_for_sqlmap,
+    export_requests_to_files,
+)
 from scripts.connectors.exploitdb import enrich_with_searchsploit
 from scripts.connectors.misp import misp_enrich_groups
 from scripts.ai.summarize import ai_summarize_groups
@@ -26,6 +33,14 @@ def parse_args():
     s.add_argument("--spider-seconds", type=int, default=120)
     s.add_argument("--ascan-seconds", type=int, default=600)
     s.add_argument("--nmap-timeout", type=int, default=1800)
+
+    # NEW ARGUMENTS for better control
+    s.add_argument("--sqlmap-top-n", type=int, default=10,
+                   help="Number of top-scoring requests from ZAP to test with SQLMap")
+    s.add_argument("--sqlmap-max-runtime", type=int, default=900,
+                   help="Max runtime per SQLMap request (seconds)")
+    s.add_argument("--sqlmap-disable", action="store_true",
+                   help="Skip SQLMap verification entirely")
 
     s.add_argument("--misp-url", default=os.getenv("MISP_URL", ""))
     s.add_argument("--misp-key", default=os.getenv("MISP_KEY", ""))
@@ -53,16 +68,14 @@ def main():
     meta = {"run_id": run_id, "target": target, "host": host}
 
     # 1) Nmap
-    print("[1/4] Nmap scan starting...")
+    print("[1/5] Nmap scan starting...")
     nmap_raw = run_nmap_all_ports(host, timeout_s=args.nmap_timeout)
     with open(os.path.join(args.outdir, "nmap_raw.json"), "w", encoding="utf-8") as f:
         json.dump({**meta, **nmap_raw}, f, indent=2)
-    print("[1/4] Nmap scan completed.")
+    print("[1/5] Nmap scan completed.")
 
-    # 2) ZAP fast scan + SQLMap verification
-    print("[2/4] ZAP & SQLMap scan starting, this may take a while...")
-
-    # ZAP SCAN
+    # 2) ZAP fast scan
+    print("[2/5] ZAP scan starting, this may take a while...")
     zap_raw = zap_fast_scan(
         target=target,
         zap_proxy=args.zap_proxy,
@@ -74,84 +87,105 @@ def main():
     # Save ZAP raw immediately
     with open(os.path.join(args.outdir, "zap_raw.json"), "w", encoding="utf-8") as f:
         json.dump({**meta, **zap_raw}, f, indent=2)
+    print("[2/5] ZAP scan completed.")
 
-    # SQLMAP TARGET PREPARATION
+    # 3) SQLMap verification (NEW: from ZAP message history)
+    print("[3/5] SQLMap verification starting...")
+    
     parsed = urlparse(target)
     base = f"{parsed.scheme}://{parsed.netloc}"
-
     zap = ZAPv2(apikey="", proxies={"http": args.zap_proxy, "https": args.zap_proxy})
 
-    try:
-        discovered = zap.core.urls(base)
-    except Exception:
-        discovered = []
-
-    param_urls = [u for u in discovered if "?" in (u or "")]
-    param_urls = param_urls[:5]  # keep quick
-
-    # Extract session cookie from ZAP history
-    cookie = None
-    try:
-        msgs = zap.core.messages(baseurl=base)
-        for m in msgs:
-            rh = m.get("requestHeader", "")
-            for line in rh.splitlines():
-                if line.lower().startswith("cookie:"):
-                    cookie = line.split(":", 1)[1].strip()
-                    break
-            if cookie:
-                break
-    except Exception:
-        pass
-
-    # SQLMAP RUNS (SEPARATE)
     sqlmap_runs = []
     sqlmap_alerts = []
 
-    def _safe_slug(u: str) -> str:
-        import re
-        return re.sub(r"[^a-zA-Z0-9]+", "_", u)[:80] or "target"
+    if not args.sqlmap_disable:
+        # NEW: Extract high-value requests from ZAP message history
+        print("     [*] Extracting and scoring requests from ZAP history...")
+        zap_analysis = analyze_zap_messages_for_sqlmap(
+            zap, base=base, top_n=args.sqlmap_top_n, verbose=True
+        )
+        top_requests = zap_analysis["top_candidates"]
 
-    for u in (param_urls if param_urls else [target]):
-        per_url_outdir = os.path.join(args.outdir, "sqlmap", _safe_slug(u))
+        print(f"     [*] Selected {len(top_requests)} top-scoring requests for SQLMap testing")
 
-        sqlmap_res = run_sqlmap_quick(
-            target_url=u,
-            output_dir=per_url_outdir,
-            max_runtime_s=900,
-            crawl=0,
-            forms=False,
-            cookie=cookie,
+        # NEW: Export requests to raw HTTP files
+        sqlmap_req_dir = os.path.join(args.outdir, "sqlmap_requests")
+        request_files = export_requests_to_files(
+            top_requests, output_dir=sqlmap_req_dir, verbose=True
         )
 
-        sqlmap_runs.append(sqlmap_res)
-        sqlmap_alerts.extend(sqlmap_findings_to_alerts(sqlmap_res))
+        # Save ZAP analysis for debugging
+        with open(os.path.join(args.outdir, "zap_message_analysis.json"), "w", encoding="utf-8") as f:
+            top_req_json = [
+                {
+                    "url": r.url,
+                    "method": r.method,
+                    "status_code": r.status_code,
+                    "score": r.score_for_sqlmap(),
+                }
+                for r in top_requests
+            ]
+            json.dump({
+                "total_messages_extracted": zap_analysis["analysis"]["total_messages"],
+                "top_selected": len(top_requests),
+                "top_requests": top_req_json,
+                "analysis": zap_analysis["analysis"],
+            }, f, indent=2)
+        print(f"     [+] Saved ZAP message analysis to zap_message_analysis.json")
 
-        # Stop early if SQLi confirmed
-        if sqlmap_res.get("finding_count", 0) > 0:
-            break
+        # NEW: Run SQLMap on each request file
+        for idx, (req_idx, req_file) in enumerate(request_files.items()):
+            print(f"     [*] SQLMap pass {idx + 1}/{len(request_files)}: {top_requests[req_idx].url[:60]}")
 
-        # Save SQLMap raw results
-        with open(os.path.join(args.outdir, "sqlmap_raw.json"), "w", encoding="utf-8") as f:
-            json.dump(sqlmap_runs, f, indent=2)
+            per_url_outdir = os.path.join(args.outdir, "sqlmap", f"request_{req_idx}")
 
-        # Save SQLMap converted alerts separately
-        with open(os.path.join(args.outdir, "sqlmap_alerts.json"), "w", encoding="utf-8") as f:
-            json.dump(sqlmap_alerts, f, indent=2)
+            try:
+                sqlmap_res = run_sqlmap_quick(
+                    request_file=req_file,  # NEW: use request file instead of URL
+                    output_dir=per_url_outdir,
+                    max_runtime_s=args.sqlmap_max_runtime,
+                    level_1=3,
+                    risk_1=2,
+                    level_2=5,
+                    risk_2=3,
+                    crawl=0,
+                    forms=False,
+                )
 
-        print("[2/4] ZAP and SQLMap scans completed.")
+                sqlmap_runs.append(sqlmap_res)
+                sqlmap_alerts.extend(sqlmap_findings_to_alerts(sqlmap_res))
 
-    # 3) Normalize
-    print("[3/4] Normalising + enrichment starting...")
+                # Save intermediate results
+                with open(os.path.join(args.outdir, "sqlmap_raw.json"), "w", encoding="utf-8") as f:
+                    json.dump(sqlmap_runs, f, indent=2)
+                with open(os.path.join(args.outdir, "sqlmap_alerts.json"), "w", encoding="utf-8") as f:
+                    json.dump(sqlmap_alerts, f, indent=2)
+
+                # Stop early if SQLi confirmed
+                if sqlmap_res.get("finding_count", 0) > 0:
+                    print(f"     [+] SQLMap found {sqlmap_res['finding_count']} injection(s). Stopping early.")
+                    break
+
+            except Exception as e:
+                print(f"     [!] Error running SQLMap on request {req_idx}: {e}")
+                continue
+
+        print("[3/5] SQLMap verification completed.")
+    else:
+        print("[3/5] SQLMap verification skipped (--sqlmap-disable).")
+
+    # 4) Normalize ZAP findings
+    print("[4/5] Normalising + enrichment starting...")
     groups, summary = normalize_zap_alerts(zap_raw["alerts"], baseurl=target)
     with open(os.path.join(args.outdir, "zap_groups.json"), "w", encoding="utf-8") as f:
         json.dump({**meta, "summary": summary, "groups": groups}, f, indent=2)
-    print("[3/4] Normalising + enrichment completed.")
+    print("[4/5] Normalising completed.")
 
-    # 4) Threat intel: ExploitDB (local searchsploit)
+    # 5) Threat intel: ExploitDB (local searchsploit)
     groups = enrich_with_searchsploit(groups, nmap_stdout=nmap_raw.get("stdout", ""))
 
-    # 5) Threat intel: MISP (optional)
+    # 6) Threat intel: MISP (optional)
     if args.misp_url:
         groups = misp_enrich_groups(
             groups,
@@ -160,15 +194,15 @@ def main():
             verify_tls=args.misp_verify_tls,
         )
 
-    # 6) AI summary
-    print("[4/4] AI summary + report generation starting...")
+    # 7) AI summary
+    print("[5/5] AI summary + report generation starting...")
     if args.ai_mode != "off":
         groups, exec_summary = ai_summarize_groups(groups)
     else:
         exec_summary = "AI summarisation disabled."
-    print("[4/4] Report completed.")
+    print("[5/5] Report completed.")
 
-    # 7) Report
+    # 8) Report
     render_console_summary(summary, groups, exec_summary)
     write_markdown_report(os.path.join(args.outdir, "report.md"), meta, summary, groups, exec_summary)
     print(f'Full report can be found at "{args.outdir}/report.md"')
