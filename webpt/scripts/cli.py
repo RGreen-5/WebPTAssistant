@@ -35,9 +35,9 @@ def parse_args():
     s.add_argument("--nmap-timeout", type=int, default=1800)
 
     # NEW ARGUMENTS for better control
-    s.add_argument("--sqlmap-top-n", type=int, default=10,
+    s.add_argument("--sqlmap-top-n", type=int, default=3,
                    help="Number of top-scoring requests from ZAP to test with SQLMap")
-    s.add_argument("--sqlmap-max-runtime", type=int, default=900,
+    s.add_argument("--sqlmap-max-runtime", type=int, default=300,
                    help="Max runtime per SQLMap request (seconds)")
     s.add_argument("--sqlmap-disable", action="store_true",
                    help="Skip SQLMap verification entirely")

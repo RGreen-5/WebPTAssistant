@@ -21,7 +21,7 @@ echo "[+] Starting Mutillidae..."
 docker run -d --name "$MUT_NAME" -p "${MUT_HOST_PORT}:80" citizenstig/nowasp >/dev/null
 
 echo "[+] Waiting for ZAP to be ready..."
-for i in {1..30}; do
+for i in {1..60}; do
   if curl -fsS "http://127.0.0.1:${ZAP_PORT}/JSON/core/view/version/" >/dev/null 2>&1; then
     break
   fi
