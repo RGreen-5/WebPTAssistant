@@ -1,173 +1,126 @@
-# zap_message_extractor.py
-#
-# This file extracts the actual requests that ZAP tested from its history
-# Think of it like: ZAP keeps a record of everything it tested, we're just
-# reading that record and picking the best candidates for SQLMap
-
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any
-from urllib.parse import urlparse, parse_qs, urlencode
+from typing import Optional, List, Dict, Any, Tuple
+from urllib.parse import urlparse, parse_qsl
+
+
+STRONG_KEYS = {
+    "password", "pass", "pwd",
+}
+MED_KEYS = {
+    "user", "username", "uid", "userid",
+    "email", "mail",
+    "id", "qid", "pid", "bid",
+    "q", "query", "search", "keyword",
+    "name", "title",
+    "comment", "message", "content",
+    "filter", "sort", "order",
+    "page", "file", "path", "include",
+    "redirect", "return", "next", "url",
+}
+TOKEN_KEYS = {"token", "csrf", "auth", "nonce", "sess", "phpsessid"}
 
 
 @dataclass
 class ZapMessage:
-    """
-    This represents ONE HTTP request that ZAP tested.
-    It contains everything: the URL, the method (GET/POST), headers, cookies, body, etc.
-    """
     message_id: int
     url: str
     method: str
     request_header: str
     request_body: str
     response_header: str
-    response_body: str
     status_code: int
 
-    def has_interesting_parameter(self) -> bool:
-        """
-        Check if this request has interesting things like:
-        - password field
-        - user field
-        - search field
-        - etc.
-        
-        These are things that are likely to be vulnerable to SQL injection
-        """
-        content = (self.url + self.request_body).lower()
-        keywords = [
-            "password", "pwd", "pass",
-            "user", "username", "uid", "userid",
-            "email", "mail",
-            "id", "qid", "pid", "bid",
-            "q", "query", "search", "keyword",
-            "token", "csrf", "auth",
-            "redirect", "return", "next", "url",
-            "name", "title",
-            "comment", "message", "content",
-            "filter", "sort", "order",
-        ]
-        return any(kw in content for kw in keywords)
-
     def get_cookie_header(self) -> Optional[str]:
-        """Extract the Cookie line from the request headers"""
         for line in self.request_header.splitlines():
             if line.lower().startswith("cookie:"):
                 return line.split(":", 1)[1].strip()
         return None
 
+    def has_security_cookie(self) -> bool:
+        cookie = self.get_cookie_header() or ""
+        return "security=" in cookie.lower()
+
+    def _param_keys(self) -> List[str]:
+        keys: List[str] = []
+
+        try:
+            u = urlparse(self.url)
+            for k, _v in parse_qsl(u.query, keep_blank_values=True):
+                keys.append(k.lower())
+        except Exception:
+            pass
+
+        body = (self.request_body or "").strip()
+        if body and "=" in body:
+            try:
+                for k, _v in parse_qsl(body, keep_blank_values=True):
+                    keys.append(k.lower())
+            except Exception:
+                pass
+
+        return keys
+
+    def has_interesting_parameter(self) -> bool:
+        keys = set(self._param_keys())
+        return bool(keys & STRONG_KEYS or keys & MED_KEYS)
+
+    def is_get_with_params(self) -> bool:
+        try:
+            u = urlparse(self.url)
+            return self.method.upper() == "GET" and bool(u.query)
+        except Exception:
+            return False
+
     def score_for_sqlmap(self) -> int:
-        """
-        Give this request a score. Higher score = more likely to have SQL injection.
-        
-        Scoring rules:
-        - POST requests are interactive (user filled out a form) = +50 points
-        - Has interesting parameters (password, user, search, etc.) = +30 points
-        - Has a body (form data) = +20 points
-        - Server said OK (200-399 response) = +15 points
-        - BUT: Directory listings and static files lose points
-        """
         score = 0
+        method = (self.method or "GET").upper()
+        url_lower = (self.url or "").lower()
+        keys = self._param_keys()
+        keyset = set(keys)
 
-        # HTTP method: POST is more interactive than GET
-        if self.method.upper() == "POST":
-            score += 50
-        elif self.method.upper() in ["PUT", "PATCH"]:
+        if method == "GET" and keyset:
             score += 30
-
-        # Parameter presence: does it have interesting field names?
-        if self.has_interesting_parameter():
-            score += 30
-
-        # Request body: suggests a form was submitted
-        if self.request_body.strip():
+        elif method == "POST":
             score += 20
-
-        # Response status: 2xx/3xx means the request worked
-        if 200 <= self.status_code < 400:
+        elif method in {"PUT", "PATCH"}:
             score += 15
 
-        # Penalize obvious non-injection URLs
-        url_lower = self.url.lower()
+        if 200 <= self.status_code < 400:
+            score += 15
+        elif self.status_code >= 400:
+            score -= 10
 
-        # Directory listing artifacts (C=D;O=D is Apache directory sorting)
-        if any(p in url_lower for p in ["?c=", "?o=", "?c=d", "?o=d"]):
+        if keyset & STRONG_KEYS:
+            score += 70
+
+        if keyset & MED_KEYS:
+            score += 30
+
+        if "page" in keyset:
+            score += 20
+
+        if self.has_security_cookie():
+            score += 40
+
+        token_hits = sum(1 for k in keys if k in TOKEN_KEYS)
+        if token_hits >= 1 and not (keyset & STRONG_KEYS):
             score -= 20
 
-        # Static files (images, stylesheets, etc.)
-        if any(url_lower.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".css", ".js", ".woff", ".ttf"]):
+        if any(p in url_lower for p in ["?c=", "?o=", "?c=d", "?o=d"]):
             score -= 30
+
+        if any(url_lower.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".gif", ".css", ".js", ".ico", ".woff", ".ttf"]):
+            score -= 40
 
         return max(0, score)
 
 
-def extract_zap_messages(zap, base: str, max_messages: int = 5000) -> List[ZapMessage]:
-    """
-    This function asks ZAP: "Give me all the requests you tested"
-    Then we convert them into ZapMessage objects
-    """
-    messages = []
-    start = 0
-    page_size = 100
-
-    while start < max_messages:
-        try:
-            # Ask ZAP for 100 messages starting at position 'start'
-            batch = zap.core.messages(baseurl=base, start=start, count=page_size)
-            if not batch:
-                break
-
-            for msg_dict in batch:
-                try:
-                    # Extract the URL from the request header
-                    # The first line of a request is like: "GET /path HTTP/1.1"
-                    request_header = msg_dict.get("requestHeader", "")
-                    header_lines = request_header.split()
-                    
-                    if len(header_lines) > 1:
-                        url = header_lines[1]
-                    else:
-                        url = ""
-                    
-                    method = header_lines[0] if header_lines else "GET"
-
-                    msg = ZapMessage(
-                        message_id=msg_dict.get("id", start),
-                        url=url,
-                        method=method,
-                        request_header=request_header,
-                        request_body=msg_dict.get("requestBody", ""),
-                        response_header=msg_dict.get("responseHeader", ""),
-                        response_body=msg_dict.get("responseBody", ""),
-                        status_code=_extract_status_code(msg_dict.get("responseHeader", "")),
-                    )
-                    messages.append(msg)
-                except Exception:
-                    # Skip messages that are broken
-                    continue
-
-            if len(batch) < page_size:
-                break
-
-            start += page_size
-        except Exception:
-            # If ZAP connection breaks, return what we have
-            break
-
-    return messages
-
-
 def _extract_status_code(response_header: str) -> int:
-    """
-    Extract the status code (200, 404, etc.) from the first line of the response.
-    First line looks like: "HTTP/1.1 200 OK"
-    """
     try:
-        first_line = response_header.split("\n")[0]
+        first_line = response_header.split("\n", 1)[0]
         parts = first_line.split()
         if len(parts) >= 2:
             return int(parts[1])
@@ -176,59 +129,127 @@ def _extract_status_code(response_header: str) -> int:
     return 0
 
 
+def _is_excluded(url: str, exclude_prefixes: List[str]) -> bool:
+    try:
+        path = (urlparse(url).path or "").lower()
+    except Exception:
+        return False
+
+    for pref in exclude_prefixes or []:
+        pref = (pref or "").strip().lower().rstrip("*")
+        if pref and path.startswith(pref):
+            return True
+    return False
+
+
+def extract_zap_messages(
+    zap,
+    base: str,
+    max_messages: int = 500,
+    exclude_prefixes: Optional[List[str]] = None,
+) -> List[ZapMessage]:
+    messages: List[ZapMessage] = []
+    start = 0
+    page_size = 50
+
+    while start < max_messages:
+        try:
+            batch = zap.core.messages(baseurl=base, start=start, count=page_size)
+            if not batch:
+                break
+
+            for msg_dict in batch:
+                try:
+                    request_header = msg_dict.get("requestHeader", "")
+                    header_parts = request_header.split()
+                    method = header_parts[0] if header_parts else "GET"
+                    url = header_parts[1] if len(header_parts) > 1 else ""
+
+                    if exclude_prefixes and _is_excluded(url, exclude_prefixes):
+                        continue
+
+                    msg = ZapMessage(
+                        message_id=int(msg_dict.get("id", start)),
+                        url=url,
+                        method=method,
+                        request_header=request_header,
+                        request_body=msg_dict.get("requestBody", ""),
+                        response_header=msg_dict.get("responseHeader", ""),
+                        status_code=_extract_status_code(msg_dict.get("responseHeader", "")),
+                    )
+                    messages.append(msg)
+                except Exception:
+                    continue
+
+            if len(batch) < page_size:
+                break
+
+            start += page_size
+        except Exception:
+            break
+
+    return messages
+
+
+def _dedupe_messages(messages: List[ZapMessage]) -> List[ZapMessage]:
+    seen: set[Tuple[str, str]] = set()
+    out: List[ZapMessage] = []
+    for m in messages:
+        key = ((m.method or "GET").upper(), m.url or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(m)
+    return out
+
+
 def select_top_requests(
     messages: List[ZapMessage],
     top_n: int = 10,
     verbose: bool = False,
 ) -> List[ZapMessage]:
-    """
-    Score all requests and return the top 10 (or top_n)
-    Verbose means "print what we're doing"
-    """
-    # Filter out obvious garbage (static files, etc.)
-    candidates = []
-    for msg in messages:
-        url_lower = msg.url.lower()
-        # Skip obvious non-functional URLs
-        if any(x in url_lower for x in [".jpg", ".png", ".gif", ".css", ".js", ".ico", ".woff"]):
-            continue
-        candidates.append(msg)
-
-    # Score and sort
-    scored = [(msg, msg.score_for_sqlmap()) for msg in candidates]
+    messages = _dedupe_messages(messages)
+    scored = [(msg, msg.score_for_sqlmap()) for msg in messages]
     scored.sort(key=lambda x: x[1], reverse=True)
 
     if verbose:
         print(f"[*] Scored {len(scored)} messages; top candidates:")
-        for msg, score in scored[:min(top_n + 5, len(scored))]:
-            print(f"    {score:3d} | {msg.method:6s} {msg.url[:80]}")
+        for msg, score in scored[:min(top_n + 8, len(scored))]:
+            print(f"    {score:3d} | {msg.method:6s} {msg.url[:100]}")
 
     return [msg for msg, _score in scored[:top_n]]
 
 
-def export_request_file(
-    message: ZapMessage,
-    output_path: str,
-    include_body: bool = True,
-) -> None:
-    """
-    Export ONE message to a file that SQLMap can read.
-    
-    The file format is just a normal HTTP request:
-    GET /path HTTP/1.1
-    Host: example.com
-    Cookie: session=123
-    
-    [optional POST body]
-    """
+def export_request_file(message: ZapMessage, output_path: str) -> None:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        # Write the request header (which includes method, path, headers, etc.)
-        f.write(message.request_header)
+    header = message.request_header or ""
+    lines = header.splitlines()
+    if not lines:
+        raise ValueError("Empty request_header from ZAP message")
 
-        # Add blank line before body if there is one
-        if include_body and message.request_body.strip():
+    parts = lines[0].split()
+    if len(parts) < 3:
+        raise ValueError(f"Bad request line: {lines[0]!r}")
+
+    method, target, version = parts[0], parts[1], parts[2]
+
+    parsed = urlparse(target)
+    if parsed.scheme and parsed.netloc:
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        target = path
+
+        has_host = any(l.lower().startswith("host:") for l in lines[1:])
+        if not has_host:
+            lines.insert(1, f"Host: {parsed.netloc}")
+
+    lines[0] = f"{method} {target} {version}"
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines).rstrip() + "\n")
+        if (message.request_body or "").strip():
             f.write("\n")
             f.write(message.request_body)
 
@@ -237,13 +258,9 @@ def export_requests_to_files(
     messages: List[ZapMessage],
     output_dir: str,
     verbose: bool = False,
-) -> Dict[str, str]:
-    """
-    Export MULTIPLE messages to files.
-    Returns a dictionary like: {0: "/tmp/sqlmap_req_0.txt", 1: "/tmp/sqlmap_req_1.txt", ...}
-    """
+) -> Dict[int, str]:
     os.makedirs(output_dir, exist_ok=True)
-    paths = {}
+    paths: Dict[int, str] = {}
 
     for idx, msg in enumerate(messages):
         req_file = os.path.join(output_dir, f"sqlmap_req_{idx}.txt")
@@ -251,7 +268,7 @@ def export_requests_to_files(
         paths[idx] = req_file
 
         if verbose:
-            print(f"[+] Exported request {idx}: {msg.method} {msg.url[:60]}")
+            print(f"[+] Exported request {idx}: {msg.method} {msg.url[:80]}")
             print(f"    → {req_file}")
 
     return paths
@@ -262,25 +279,23 @@ def analyze_zap_messages_for_sqlmap(
     base: str,
     top_n: int = 10,
     verbose: bool = True,
+    exclude_prefixes: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
-    """
-    This is the "easy button" - does everything in one function:
-    1. Extract messages from ZAP
-    2. Score them
-    3. Pick the top N
-    4. Return the results + analysis
-    """
-    messages = extract_zap_messages(zap, base=base, max_messages=5000)
+    messages = extract_zap_messages(
+        zap,
+        base=base,
+        max_messages=500,
+        exclude_prefixes=exclude_prefixes or [],
+    )
 
     if verbose:
         print(f"[*] Extracted {len(messages)} messages from ZAP history")
 
     top = select_top_requests(messages, top_n=top_n, verbose=verbose)
 
-    # Analysis: what cookies did we find? what methods?
-    cookies_seen = {}
-    methods_seen = {}
-    params_seen = {}
+    cookies_seen: Dict[str, int] = {}
+    methods_seen: Dict[str, int] = {}
+    urls_with_interesting = 0
 
     for msg in messages:
         cookie = msg.get_cookie_header()
@@ -288,7 +303,7 @@ def analyze_zap_messages_for_sqlmap(
             cookies_seen[cookie] = cookies_seen.get(cookie, 0) + 1
         methods_seen[msg.method] = methods_seen.get(msg.method, 0) + 1
         if msg.has_interesting_parameter():
-            params_seen[msg.url] = True
+            urls_with_interesting += 1
 
     return {
         "total_extracted": len(messages),
@@ -297,10 +312,8 @@ def analyze_zap_messages_for_sqlmap(
             "total_messages": len(messages),
             "top_n_selected": len(top),
             "cookies_found": len(cookies_seen),
-            "most_common_cookies": sorted(
-                cookies_seen.items(), key=lambda x: x[1], reverse=True
-            )[:5],
+            "most_common_cookies": sorted(cookies_seen.items(), key=lambda x: x[1], reverse=True)[:5],
             "http_methods": methods_seen,
-            "urls_with_interesting_params": len(params_seen),
+            "messages_with_interesting_params": urls_with_interesting,
         },
     }
