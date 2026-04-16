@@ -20,7 +20,7 @@ WebPT Assistant is a modular web application penetration testing tool that autom
 webpt/
 ├── output/
 ├── scripts/
-├── install_dependencies.sh
+├── setup.sh
 ├── run_docker.sh
 ├── helpme.txt
 └── webpt
@@ -40,14 +40,13 @@ Setup Instructions
 git clone https://github.com/RGreen-5/WebPTAssistant.git
 cd WebPTAssistant/webpt
 2. Make the scripts executable
-chmod +x install_dependencies.sh
+chmod +x setup.sh
 chmod +x run_docker.sh
 chmod +x webpt
 3. Install dependencies
 
 Run:
-
-./install_dependencies.sh
+./setup.sh
 
 This installs the Python packages and other dependencies required by the tool.
 
@@ -89,7 +88,6 @@ Output Files
 After a scan completes, output files are written to the output/ directory.
 
 Typical files include:
-
 nmap_raw.json
 zap_raw.json
 custom_sqli_alerts.json
@@ -101,33 +99,27 @@ Viewing Results
 Main report
 
 The final report is saved to:
-
 output/report.md
-SQL injection findings
 
 If SQL injection signals are detected, they are saved to:
-
 output/custom_sqli_alerts.json
-Grouped findings
 
 Normalised findings are saved to:
-
 output/zap_groups.json
-Example Workflow
 
 Run everything in order:
-
 git clone https://github.com/RGreen-5/WebPTAssistant.git
 cd WebPTAssistant/webpt
-chmod +x install_dependencies.sh run_docker.sh webpt
-./install_dependencies.sh
+chmod +x setup.sh run_docker.sh webpt
+./setup.sh
 ./run_docker.sh
 ./webpt scan --target http://172.17.0.4/
+
 Notes
 Use a reachable target URL.
 In Docker environments, container IPs may work better than 127.0.0.1 depending on how the containers are networked.
 OWASP ZAP must be running before starting a scan.
 This tool is intended for authorised testing and controlled lab environments only.
-Author
 
+Author
 Robert Green
