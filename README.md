@@ -111,7 +111,7 @@ Run everything in order:
 git clone https://github.com/RGreen-5/WebPTAssistant.git
 cd WebPTAssistant/webpt
 chmod +x setup.sh run_docker.sh webpt
-./setup.sh
+sudo bash setup.sh
 ./run_docker.sh
 ./webpt scan --target http://172.17.0.4/
 
