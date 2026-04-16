@@ -70,6 +70,13 @@ def parse_args():
     return p.parse_args()
 
 
+def _build_probe_url(target: str, probe: str) -> str:
+    probe = (probe or "").strip()
+    if probe.startswith("http://") or probe.startswith("https://"):
+        return probe
+    return f"{target}{probe}"
+
+
 def main():
     args = parse_args()
     target = args.target.rstrip("/")
@@ -128,6 +135,7 @@ def main():
             top_requests_for_sqli = zap_analysis_for_sqli["top_candidates"]
             get_targets = []
 
+            # Candidate GET URLs already containing parameters
             for msg in top_requests_for_sqli:
                 try:
                     parsed_msg = urlparse(msg.url)
@@ -136,8 +144,14 @@ def main():
                 except Exception:
                     continue
 
-            # Add deterministic SQLi-Labs probes if the target looks like SQLi-Labs
-            sqli_lab_paths = [
+            # Use ALL discovered URLs from ZAP to decide whether to add seeded probes
+            try:
+                all_discovered_urls = zap.core.urls(base)
+            except Exception:
+                all_discovered_urls = [r.url for r in top_requests_for_sqli]
+
+            # SQLi-Labs seeded probes
+            sqli_lab_probes = [
                 "/Less-1/?id=1",
                 "/Less-2/?id=1",
                 "/Less-3/?id=1",
@@ -145,10 +159,30 @@ def main():
                 "/Less-5/?id=1",
             ]
 
-            discovered_urls = [r.url for r in top_requests_for_sqli]
-            if any("/Less-" in u for u in discovered_urls):
-                for p in sqli_lab_paths:
-                    probe_url = f"{target}{p}"
+            if any("/Less-" in u for u in all_discovered_urls):
+                for probe in sqli_lab_probes:
+                    probe_url = _build_probe_url(target, probe)
+                    if probe_url not in get_targets:
+                        get_targets.append(probe_url)
+
+            # Mutillidae seeded probes
+            mutillidae_probes = [
+                "/index.php?page=user-info.php&username=test%27&password=test%27&user-info-php-submit-button=View+Account+Details",
+            ]
+
+            if any(
+                marker in " ".join(all_discovered_urls).lower()
+                for marker in [
+                    "user-info.php",
+                    "add-to-your-blog.php",
+                    "captured-data.php",
+                    "show-log.php",
+                    "register.php",
+                    "sqlmap-targets.php",
+                ]
+            ):
+                for probe in mutillidae_probes:
+                    probe_url = _build_probe_url(target, probe)
                     if probe_url not in get_targets:
                         get_targets.append(probe_url)
 

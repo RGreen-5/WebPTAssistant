@@ -19,6 +19,7 @@ SQL_ERROR_PATTERNS = [
     r"sqlite error",
     r"postgresql.*error",
     r"supplied argument is not a valid mysql",
+    r"error in your sql syntax",
 ]
 
 STRONG_PARAM_KEYS = {
@@ -40,20 +41,23 @@ def _replace_param(url: str, key: str, value: str) -> str:
     parsed = urlparse(url)
     qs = parse_qsl(parsed.query, keep_blank_values=True)
     new_qs = []
+
     for k, v in qs:
         if k == key:
             new_qs.append((k, value))
         else:
             new_qs.append((k, v))
+
     new_query = urlencode(new_qs, doseq=True)
-    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+    return urlunparse(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment)
+    )
 
 
 def _find_sql_errors(text: str) -> list[str]:
     matches = []
-    lower = text.lower()
     for pat in SQL_ERROR_PATTERNS:
-        if re.search(pat, lower, re.IGNORECASE):
+        if re.search(pat, text, re.IGNORECASE):
             matches.append(pat)
     return matches
 
@@ -84,13 +88,16 @@ def detect_sqli_for_url(
     for key, original_value in params:
         key_l = key.lower()
 
-        # Prioritise useful parameter names
+        # Prioritise useful parameter names on larger query strings
         if key_l not in STRONG_PARAM_KEYS and len(params) > 3:
             continue
 
-        quote_url = _replace_param(url, key, f"{original_value}'")
-        true_url = _replace_param(url, key, f"{original_value}' OR '1'='1")
-        false_url = _replace_param(url, key, f"{original_value}' OR '1'='2")
+        # Avoid double-encoding / double-quoting if seed URL already contains quotes
+        clean_value = original_value.replace("%27", "").replace("'", "")
+
+        quote_url = _replace_param(url, key, f"{clean_value}'")
+        true_url = _replace_param(url, key, f"{clean_value}' OR 1=1-- ")
+        false_url = _replace_param(url, key, f"{clean_value}' OR 1=2-- ")
 
         try:
             quote_resp = requests.get(quote_url, timeout=timeout_s)
@@ -108,10 +115,8 @@ def detect_sqli_for_url(
         false_len, false_hash = _body_signature(false_text)
 
         quote_errors = _find_sql_errors(quote_text)
-        true_errors = _find_sql_errors(true_text)
-        false_errors = _find_sql_errors(false_text)
 
-        # 1) SQL error based detection
+        # 1) Error-based detection
         if quote_errors and quote_errors != baseline_errors:
             findings.append(
                 {
@@ -138,10 +143,11 @@ def detect_sqli_for_url(
             continue
 
         # 2) Boolean differential detection
-        len_diff = abs(true_len - false_len)
-        hash_diff = true_hash != false_hash
+        true_vs_false = true_hash != false_hash
+        true_vs_baseline = true_hash != baseline_hash
+        false_vs_baseline = false_hash != baseline_hash
 
-        if hash_diff and len_diff > 20:
+        if true_vs_false and (true_vs_baseline or false_vs_baseline):
             findings.append(
                 {
                     "alert": "SQL Injection (Custom Boolean Probe)",
@@ -156,7 +162,10 @@ def detect_sqli_for_url(
                     "wascid": "19",
                     "description": "A custom boolean SQLi probe produced materially different true/false responses.",
                     "solution": "Use parameterised queries / prepared statements and validate input.",
-                    "evidence": f"True/false differential detected. Baseline length={baseline_len}, true length={true_len}, false length={false_len}",
+                    "evidence": (
+                        f"True/false differential detected. "
+                        f"Baseline length={baseline_len}, true length={true_len}, false length={false_len}"
+                    ),
                     "other": "",
                     "tags": {
                         "CWE-89": "https://cwe.mitre.org/data/definitions/89.html",

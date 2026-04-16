@@ -168,9 +168,9 @@ def zap_fast_scan(
     alerts = _fetch_alerts_paged(
         zap,
         baseurl=base,
-        page_size=100,
-        max_total=3000,
-        retries=3,
+        page_size=200,
+        max_total=20000,
+        retries=5,
     )
 
     return {
@@ -182,7 +182,7 @@ def zap_fast_scan(
         "spider_budget_s": spider_budget_s,
         "ascan_budget_s": ascan_budget_s,
         "param_urls_considered": len(param_urls),
-        "alerts_truncated": (len(alerts) >= 3000),
+        "alerts_truncated": (len(alerts) >= 20000),
         "alerts": alerts,
         "alert_instances": len(alerts),
     }
