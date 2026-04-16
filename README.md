@@ -67,23 +67,8 @@ Running the Tool
 
 Basic usage:
 
-./webpt scan --target http://TARGET/
-
-Example:
-
-./webpt scan --target http://172.17.0.4/
-Useful Options
-Change ZAP proxy
-./webpt scan --target http://172.17.0.4/ --zap-proxy http://127.0.0.1:8080
-Change spider and active scan time
-./webpt scan --target http://172.17.0.4/ --spider-seconds 60 --ascan-seconds 300
-Change number of analyst review requests exported
-./webpt scan --target http://172.17.0.4/ --review-top-n 6
-Disable custom SQL injection detection
-./webpt scan --target http://172.17.0.4/ --sqli-disable
-Disable AI summarisation
-./webpt scan --target http://172.17.0.4/ --ai-mode off
-Output Files
+"./webpt"
+"target: http://TARGET/"
 
 After a scan completes, output files are written to the output/ directory.
 
