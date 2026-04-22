@@ -1,8 +1,4 @@
-# sqlmap_runner.py (UPDATED VERSION)
-#
-# This file runs SQLMap to find SQL injections.
-# NEW: It now supports reading from request files (-r mode) which is MUCH better
-# because it preserves cookies, POST bodies, and all the context ZAP gathered
+# sqlmap_runner.py is no longer in use
 
 from __future__ import annotations
 
